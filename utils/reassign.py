@@ -1,13 +1,16 @@
+"""
+Legacy single-row reassignment (stateless). Prefer apply_automation_to_dataframe()
+for load-aware, multi-step prevention in the main pipeline.
+"""
+
 import pandas as pd
 
-employee_pool = pd.DataFrame({
-    "employee": ["A","B","C","D"],
-    "skill": [5,4,3,5],
-    "load": [3,6,8,2]
-})
+from utils.automation import EmployeePool
 
-def reassign(row):
-    if row['predicted_breach'] == 1:
-        emp = employee_pool.sort_values(['skill','load'], ascending=[False,True]).iloc[0]
-        return emp['employee']
-    return row['assigned_to']
+
+def reassign(row: pd.Series):
+    if int(row.get("predicted_breach", 0)) != 1:
+        return row["assigned_to"]
+    pool = EmployeePool()
+    emp, _ = pool.pick_reassignee(str(row.get("assigned_to", "")))
+    return emp if emp is not None else row["assigned_to"]

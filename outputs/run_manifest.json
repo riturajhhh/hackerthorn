@@ -1,0 +1,17 @@
+{
+  "run_at_utc": "2026-03-29T04:04:02.607621+00:00",
+  "rows_scored": 1000,
+  "predicted_at_risk": 198,
+  "total_financial_exposure_ev": 2056699.5632484476,
+  "total_prevention_value_estimate": 167607.6981353762,
+  "escalation_rows_t1_t2": 2,
+  "automation_mix": {
+    "MONITOR": 143,
+    "RESOURCE_REQUEST": 48,
+    "REASSIGN": 5,
+    "REASSIGN_NOTIFY_LEAD": 1,
+    "ESCALATE_OPS": 1
+  },
+  "genai_llm_rows": 0,
+  "notes": "EV = probability * penalty_cost per row; prevention value is confidence-weighted heuristic."
+}

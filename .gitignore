@@ -1,9 +1,36 @@
-.venv/
+# --- Secrets (never commit real keys) ---
+.env
+.env.local
+.env.*.local
 
-data/
-*.csv
-models/
-*.pkl
-outputs/
-venv/
+# --- Python ---
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# --- Virtual environments ---
+.venv/
+venv/
+ENV/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.log
+
+# --- IDE (optional) ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Note: data/, outputs/, models/ are NOT ignored so you can commit demo artifacts for GitHub.
