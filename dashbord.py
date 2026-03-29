@@ -241,48 +241,37 @@ def parse_agent_cell(raw: str) -> dict | None:
         return None
 
 
-def run_pipeline(df_train: pd.DataFrame, df_test: pd.DataFrame, logs: list[str]) -> pd.DataFrame:
-    """Run the full ML → automation → GenAI pipeline, appending progress to *logs*."""
+def run_pipeline(df_test: pd.DataFrame, logs: list[str]) -> pd.DataFrame:
+    """Run the ML inference → automation → GenAI pipeline, appending progress to *logs*."""
 
     ts = lambda: datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
     logs.append(f"[{ts()}] 🔄 Pipeline started")
-    logs.append(f"[{ts()}]    Train rows: {len(df_train):,} | Test rows: {len(df_test):,}")
+    logs.append(f"[{ts()}]    Rows to score: {len(df_test):,}")
+
+    logs.append(f"[{ts()}] ⚙️  Loading pre-trained model artifacts from models/ …")
+    model_path = ROOT / "models" / "model.pkl"
+    artifacts_path = ROOT / "models" / "artifacts.pkl"
+    if not model_path.exists() or not artifacts_path.exists():
+        logs.append(f"[{ts()}] ❌ Error: Missing pre-trained model or artifacts.")
+        st.error("Missing pre-trained model or artifacts in models/. Run app.py first.")
+        return df_test
+    
+    model = pickle.load(open(model_path, "rb"))
+    artifacts = pickle.load(open(artifacts_path, "rb"))
+    le, imp, scaler, features = artifacts["le"], artifacts["imp"], artifacts["scaler"], artifacts["features"]
 
     # Feature engineering
     logs.append(f"[{ts()}] ⚙️  Feature engineering …")
-    df_train = engineer(df_train)
     df_test = engineer(df_test)
     logs.append(f"[{ts()}]    Generated: priority_score, time_ratio, urgency_score, risk_score, tight_deadline, very_tight")
 
-    features = [
-        "priority_score", "estimated_time", "time_remaining",
-        "completion_percentage", "time_ratio", "urgency_score",
-        "risk_score", "tight_deadline", "very_tight", "assigned_to",
-    ]
-
-    X_train = df_train[features].copy()
-    y_train = df_train["breach"]
     X_test = df_test[features].copy()
-
-    le = LabelEncoder()
-    X_train["assigned_to"] = le.fit_transform(X_train["assigned_to"].astype(str))
     X_test["assigned_to"] = X_test["assigned_to"].apply(lambda v: safe_encode(le, v))
-
-    imp = SimpleImputer(strategy="median")
-    scaler = StandardScaler()
-    X_train_s = scaler.fit_transform(imp.fit_transform(X_train))
     X_test_s = scaler.transform(imp.transform(X_test))
 
-    # Model training
-    logs.append(f"[{ts()}] 🌲 Training RandomForest (300 trees, max_depth=15, balanced) …")
-    model = RandomForestClassifier(
-        n_estimators=300, max_depth=15,
-        class_weight="balanced", random_state=42, n_jobs=-1,
-    )
-    model.fit(X_train_s, y_train)
-    logs.append(f"[{ts()}]    Model fitted on {X_train_s.shape[0]:,} samples × {X_train_s.shape[1]} features")
-
+    # Inference
+    logs.append(f"[{ts()}] 🌲 Running Inference with pre-trained RandomForest …")
     y_pred = model.predict(X_test_s)
     y_prob = model.predict_proba(X_test_s)[:, 1]
 
@@ -421,22 +410,17 @@ with ds_left:
         horizontal=True,
     )
 
-uploaded_train = None
 uploaded_test = None
 
 if data_mode == "📤 Upload dataset":
     st.markdown(
         "<p style='color:#9090c0; font-size:0.85rem; margin-bottom:4px;'>"
-        "Upload <b>train.csv</b> and <b>test.csv</b> with columns: "
+        "Upload your operational data (CSV) with columns: "
         "<code>priority, estimated_time, time_remaining, assigned_to, breach, penalty_cost</code>"
         "</p>",
         unsafe_allow_html=True,
     )
-    up_l, up_r = st.columns(2)
-    with up_l:
-        uploaded_train = st.file_uploader("Train CSV", type=["csv"], key="up_train")
-    with up_r:
-        uploaded_test = st.file_uploader("Test CSV", type=["csv"], key="up_test")
+    uploaded_test = st.file_uploader("Operational Data (CSV)", type=["csv"], key="up_test")
 
 with ds_right:
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
@@ -451,35 +435,30 @@ if run_btn:
 
     # Resolve data
     if data_mode == "📤 Upload dataset":
-        if uploaded_train is None or uploaded_test is None:
-            st.error("Please upload both **train.csv** and **test.csv** above.")
+        if uploaded_test is None:
+            st.error("Please upload your operational data CSV above.")
             st.stop()
-        df_train = pd.read_csv(uploaded_train)
         df_test = pd.read_csv(uploaded_test)
-        logs.append(f"[DATA] Loaded uploaded CSVs (train: {len(df_train):,}, test: {len(df_test):,})")
+        logs.append(f"[DATA] Loaded uploaded CSV (rows: {len(df_test):,})")
     else:
-        train_path = ROOT / "data" / "train.csv"
         test_path = ROOT / "data" / "test.csv"
-        if not train_path.exists() or not test_path.exists():
-            st.error(f"Demo data not found at `{train_path}`. Place train.csv and test.csv in data/.")
+        if not test_path.exists():
+            st.error(f"Demo data not found at `{test_path}`. Place test.csv in data/.")
             st.stop()
-        df_train = pd.read_csv(train_path)
         df_test = pd.read_csv(test_path)
-        logs.append(f"[DATA] Loaded demo CSVs from data/ (train: {len(df_train):,}, test: {len(df_test):,})")
+        logs.append(f"[DATA] Loaded demo CSV from data/ (rows: {len(df_test):,})")
 
     # Ensure required columns
     required = {"priority", "estimated_time", "time_remaining", "assigned_to", "breach", "penalty_cost"}
-    for label, df_check in [("train", df_train), ("test", df_test)]:
-        missing = required - set(df_check.columns)
-        if missing:
-            st.error(f"**{label}.csv** is missing columns: `{', '.join(sorted(missing))}`")
-            st.stop()
+    missing = required - set(df_test.columns)
+    if missing:
+        st.error(f"**Uploaded CSV** is missing columns: `{', '.join(sorted(missing))}`")
+        st.stop()
 
-    df_train["breach"] = df_train["breach"].astype(int)
     df_test["breach"] = df_test["breach"].astype(int)
 
     with st.spinner("Running ML scoring → Automation → GenAI agents …"):
-        df_result = run_pipeline(df_train, df_test, logs)
+        df_result = run_pipeline(df_test, logs)
 
     st.session_state["results_df"] = df_result
     st.session_state["run_ts"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
