@@ -1,9 +1,7 @@
-pandas
-numpy
-scikit-learn
-streamlit
-plotly
-streamlit-autorefresh
-python-dotenv
-openai
+streamlit==1.33.0
+altair==4.2.2
+pandas==2.1.4
+numpy==1.26.4
+scikit-learn==1.3.2
 requests
+openai

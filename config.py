@@ -20,7 +20,7 @@ def _env(name: str, default: str = "") -> str:
 
 
 # GenAI
-OPENAI_API_KEY = _env("OPENAI_API_KEY")
+OPENAI_API_KEY = _env("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")
 OPENAI_MODEL = _env("OPENAI_MODEL", "gpt-4o-mini")
 
 # Slack
